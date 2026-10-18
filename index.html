@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog Platform</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .post { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        .comment { background: #f9f9f9; padding: 10px; margin-top: 10px; border-left: 3px solid #007bff; }
+        input, textarea, button { margin: 5px 0; padding: 8px; width: 100%; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; width: auto; }
+        #auth-section { background: #eee; padding: 15px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Blog Platform</h1>
+    
+    <div id="auth-section">
+        <h3>Login / Register</h3>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="register()">Register</button>
+        <button onclick="login()">Login</button>
+        <p id="user-status"></p>
+    </div>
+
+    <div id="create-post-section" style="display: none;">
+        <h3>Create a New Post</h3>
+        <input type="text" id="post-title" placeholder="Post Title">
+        <textarea id="post-content" placeholder="Write your post here..."></textarea>
+        <button onclick="createPost()">Submit Post</button>
+    </div>
+
+    <h2>Recent Posts</h2>
+    <div id="posts-container"></div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        let token = localStorage.getItem('token');
+        
+        if(token) document.getElementById('create-post-section').style.display = 'block';
+
+        async function register() {
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            await fetch(`${API_URL}/register`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            });
+            alert("Registered! You can now log in.");
+        }
+
+        async function login() {
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            });
+            const data = await res.json();
+            if (data.token) {
+                localStorage.setItem('token', data.token);
+                token = data.token;
+                document.getElementById('user-status').innerText = `Logged in as ${data.username}`;
+                document.getElementById('create-post-section').style.display = 'block';
+            } else {
+                alert("Login failed.");
+            }
+        }
+
+        async function loadPosts() {
+            const res = await fetch(`${API_URL}/posts`);
+            const posts = await res.json();
+            const container = document.getElementById('posts-container');
+            container.innerHTML = '';
+            
+            for (let post of posts) {
+                const commentRes = await fetch(`${API_URL}/posts/${post.id}/comments`);
+                const comments = await commentRes.json();
+                
+                let commentsHTML = comments.map(c => `<div class="comment"><strong>${c.username}:</strong> ${c.text}</div>`).join('');
+                
+                container.innerHTML += `
+                    <div class="post">
+                        <h3>${post.title} <small>by ${post.username}</small></h3>
+                        <p>${post.content}</p>
+                        ${token ? `<button onclick="deletePost(${post.id})">Delete</button>` : ''}
+                        <h4>Comments</h4>
+                        ${commentsHTML}
+                        ${token ? `
+                            <input type="text" id="comment-input-${post.id}" placeholder="Add a comment...">
+                            <button onclick="addComment(${post.id})">Comment</button>
+                        ` : '<p><i>Log in to comment</i></p>'}
+                    </div>
+                `;
+            }
+        }
+
+        async function createPost() {
+            const title = document.getElementById('post-title').value;
+            const content = document.getElementById('post-content').value;
+            await fetch(`${API_URL}/posts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ title, content })
+            });
+            loadPosts();
+        }
+
+        async function deletePost(id) {
+            await fetch(`${API_URL}/posts/${id}`, {
+                method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
+            });
+            loadPosts();
+        }
+
+        async function addComment(postId) {
+            const text = document.getElementById(`comment-input-${postId}`).value;
+            await fetch(`${API_URL}/posts/${postId}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ text })
+            });
+            loadPosts();
+        }
+
+        loadPosts();
+    </script>
+</body>
+</html>
